@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 import socket
 import struct
+from time import monotonic
 
 
 HEADER = struct.Struct(">HHHBB")
@@ -296,10 +297,10 @@ def validate_connection_options(args):
 
 
 def redirect_wifi(bind_ip: str, collector_ip: str, server_ip: str, server_port: int,
-                  *, udp_port: int = 58899):
+                  *, udp_port: int = 58899, timeout: float = 1):
     """Targeted discovery variants from EyeBond Local collector/discovery.py.
 
-    Sending UDP is not an acknowledgement of endpoint restoration. No broadcast,
+    A UDP reply is not proof of TCP endpoint restoration. No broadcast,
     persistent FC3/AT endpoint writes, reset, baud changes or login are attempted.
     """
     base = f"set>server={server_ip}:{server_port};".encode("ascii")
@@ -307,6 +308,24 @@ def redirect_wifi(bind_ip: str, collector_ip: str, server_ip: str, server_port: 
         sock.bind((bind_ip, 0))
         for suffix in (b"", b"\r\n", b"\n"):
             sock.sendto(base + suffix, (collector_ip, udp_port))
+            # Keep the source port open for the collector's reply. Closing right
+            # after sendto makes the host return ICMP port-unreachable instead.
+            # Try the next format only if this one receives no valid reply.
+            deadline = monotonic() + timeout
+            while True:
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    break
+                sock.settimeout(remaining)
+                try:
+                    reply, peer = sock.recvfrom(2048)
+                except socket.timeout:
+                    break
+                if peer == (collector_ip, udp_port) and reply in (
+                    b"rsp>server=1;", b"rsp>server=2;",
+                ):
+                    return reply
+    return None
 
 
 async def run(args, controls, windows):
@@ -347,8 +366,11 @@ async def run(args, controls, windows):
             journal.record("callback_original_saved", collector_ip=args.peer_ip,
                            host=args.return_host, port=args.return_port)
             redirect_attempted = True
-            redirect_wifi(args.listen, args.peer_ip, args.listen, args.port)
-            journal.record("callback_redirect_sent", host=args.listen, port=args.port)
+            reply = await asyncio.to_thread(
+                redirect_wifi, args.listen, args.peer_ip, args.listen, args.port)
+            journal.record("callback_redirect_sent", host=args.listen, port=args.port,
+                           udp_reply=reply.decode("ascii") if reply else None)
+            print(f"UDP redirect reply: {reply.decode('ascii') if reply else 'none (TCP callback still awaited)'}", flush=True)
         wire = await asyncio.wait_for(connected, args.connect_timeout)
         await wire.identify(args.pn)
         journal.record("identity_verified", pn=args.pn, product_info=PRODUCT_INFO,
@@ -408,9 +430,11 @@ async def run(args, controls, windows):
             try:
                 if redirect_attempted:
                     try:
-                        redirect_wifi(args.listen, args.peer_ip, args.return_host, args.return_port)
+                        reply = await asyncio.to_thread(
+                            redirect_wifi, args.listen, args.peer_ip, args.return_host, args.return_port)
                         journal.record("callback_return_sent", host=args.return_host,
-                                       port=args.return_port, verified=False)
+                                       port=args.return_port, verified=False,
+                                       udp_reply=reply.decode("ascii") if reply else None)
                         print("Original callback requested via UDP; re-enable EyeBond Local and verify telemetry. UDP delivery is not guaranteed.")
                     except Exception as exc:
                         journal.record("CALLBACK_RETURN_FAILED", host=args.return_host,
@@ -455,7 +479,7 @@ def main():
         print("Interrupted. Check the journal for original_restored; restoration is NOT guaranteed after power/network loss.")
         return 130
     except Exception as exc:
-        print(f"STOP: {exc}")
+        print(f"STOP: {type(exc).__name__}: {exc}")
         return 2
 
 

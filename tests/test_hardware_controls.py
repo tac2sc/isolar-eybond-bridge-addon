@@ -12,6 +12,8 @@ import struct
 import socket
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -290,6 +292,30 @@ def wifi_args(report, **changes):
 
 
 class WifiPlanningTests(unittest.TestCase):
+    def test_delayed_udp_reply_is_received_before_discovery_socket_closes(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as collector:
+            collector.bind(("127.0.0.1", 0))
+            collector.settimeout(1)
+            requests = []
+
+            def reply():
+                payload, peer = collector.recvfrom(2048)
+                requests.append(payload)
+                time.sleep(0.02)  # reproduces a real reply after sendto returns
+                collector.sendto(b"rsp>server=1;", peer)
+
+            worker = threading.Thread(target=reply)
+            worker.start()
+            try:
+                response = hardware.redirect_wifi(
+                    "127.0.0.1", "127.0.0.1", "127.0.0.1", 8898,
+                    udp_port=collector.getsockname()[1])
+            finally:
+                worker.join(timeout=2)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(response, b"rsp>server=1;")
+            self.assertEqual(requests, [b"set>server=127.0.0.1:8898;"])
+
     def test_return_endpoint_required_before_connecting(self):
         for changes in ({"return_host": None}, {"return_port": None},
                         {"return_port": 0}, {"return_host": "255.255.255.255"},
@@ -299,6 +325,9 @@ class WifiPlanningTests(unittest.TestCase):
 
     def test_redirect_is_targeted_and_matches_upstream_variants(self):
         with patch.object(hardware.socket, "socket") as factory:
+            sock = factory.return_value.__enter__.return_value
+            sock.recvfrom.side_effect = [socket.timeout(), socket.timeout(),
+                                        (b"rsp>server=2;", ("192.0.2.20", 58899))]
             hardware.redirect_wifi("192.0.2.10", "192.0.2.20", "192.0.2.30", 8899)
         sock = factory.return_value.__enter__.return_value
         sock.bind.assert_called_once_with(("192.0.2.10", 0))
@@ -307,6 +336,28 @@ class WifiPlanningTests(unittest.TestCase):
             for suffix in (b"", b"\r\n", b"\n")
         ])
         sock.setsockopt.assert_not_called()  # never enable broadcast
+
+    def test_udp_replies_from_wrong_peer_or_with_unknown_status_are_ignored(self):
+        with patch.object(hardware.socket, "socket") as factory:
+            sock = factory.return_value.__enter__.return_value
+            sock.recvfrom.side_effect = [
+                (b"rsp>server=2;", ("192.0.2.21", 58899)),
+                (b"rsp>server=2;", ("192.0.2.20", 1234)),
+                (b"rsp>server=9;", ("192.0.2.20", 58899)),
+                (b"rsp>server=2;", ("192.0.2.20", 58899)),
+            ]
+            reply = hardware.redirect_wifi("192.0.2.10", "192.0.2.20", "192.0.2.30", 8899)
+        self.assertEqual(reply, b"rsp>server=2;")
+        self.assertEqual(sock.sendto.call_count, 1)
+
+    def test_udp_silence_is_bounded_and_not_reported_as_an_acknowledgement(self):
+        with patch.object(hardware.socket, "socket") as factory:
+            sock = factory.return_value.__enter__.return_value
+            sock.recvfrom.side_effect = socket.timeout()
+            reply = hardware.redirect_wifi("192.0.2.10", "192.0.2.20", "192.0.2.30", 8899)
+        self.assertIsNone(reply)
+        self.assertEqual(sock.sendto.call_count, 3)
+        self.assertEqual(sock.recvfrom.call_count, 3)
 
 
 class SimulatedWifiCollector(asyncio.DatagramProtocol):
@@ -326,8 +377,12 @@ class SimulatedWifiCollector(asyncio.DatagramProtocol):
         self.lost_ack = lost_ack
         self.restore_fail = restore_fail
 
+    def connection_made(self, transport):
+        self.transport = transport
+
     def datagram_received(self, data, address):
         self.redirects.append(data)
+        self.transport.sendto(b"rsp>server=2;", address)
         if self.task is None:
             endpoint = data.decode("ascii").strip().removeprefix("set>server=").removesuffix(";")
             host, port = endpoint.split(":")
@@ -417,13 +472,12 @@ class WifiRunTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.wait_for(collector.task, 2)
                 rows = [json.loads(line) for line in Path(args.report).read_text().splitlines()]
                 self.assertIsNone(collector.error)
-                self.assertEqual(collector.redirects[-3:], [
-                    b"set>server=127.0.0.1:8899;" + suffix
-                    for suffix in (b"", b"\r\n", b"\n")
-                ])
+                self.assertEqual(collector.redirects[-1], b"set>server=127.0.0.1:8899;")
+                self.assertEqual(len(collector.redirects), 2)
                 self.assertEqual(rows[0]["event"], "callback_original_saved")
                 self.assertEqual(rows[-1]["event"], "callback_return_sent")
                 self.assertFalse(rows[-1]["verified"])
+                self.assertEqual(rows[-1]["udp_reply"], "rsp>server=2;")
                 return outcome, collector, rows
         finally:
             udp.close()
@@ -480,7 +534,7 @@ class WifiRunTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             args = wifi_args(Path(directory) / "report.jsonl", port=0,
                              connect_timeout=0.01, write=False, control=[])
-            with patch.object(hardware, "redirect_wifi") as redirect:
+            with patch.object(hardware, "redirect_wifi", return_value=None) as redirect:
                 with self.assertRaises(TimeoutError):
                     await hardware.run(args, (), {})
             self.assertEqual(redirect.call_count, 2)

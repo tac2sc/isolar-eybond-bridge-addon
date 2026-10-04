@@ -113,7 +113,14 @@ alternative register map, serial speed, password or control protocol.
 No USB Bridge is needed in this mode. The Wi-Fi collector itself opens the
 reverse TCP connection to the test listener. The runner sends **only targeted
 UDP** `set>server=IP:PORT;` discovery variants to that collector's IPv4 on port
-58899. The same FC2 PN query and FC4 route used by EyeBond Local's SRNE driver
+58899. The UDP source socket remains open while awaiting the reply: each format
+gets up to one second, and the next format is sent only after a timeout. Replies
+are accepted only from that collector's IP/UDP port and must be
+`rsp>server=1;` or `rsp>server=2;`. This avoids closing the socket before the
+reply and causing host-generated ICMP port-unreachable messages. The wait runs
+outside the event loop so the TCP listener remains responsive. Console and
+JSONL records include the UDP reply (or its absence); it is not TCP confirmation.
+The same FC2 PN query and FC4 route used by EyeBond Local's SRNE driver
 are used: devcode 1, collector address 255, Modbus slave 1. A truncated heartbeat
 PN is not accepted as the full identity; FC2 must return the exact supplied PN.
 Trailing NUL padding in that reply is supported.
