@@ -1,0 +1,20 @@
+configuration:
+  serial_device:
+    name: Serial device
+    description: Type /dev/serial/by-path/... or /dev/ttyUSBx for the inverter adapter. Identical CH340 adapters can share a by-id name.
+  serial_baud:
+    name: Serial baud rate
+    description: 9600 for iSolar SMX II; EyeBond Local may probe other speeds.
+  ha_host:
+    name: Home Assistant IPv4 address
+    description: Leave blank for discovery, or enter the LAN address.
+  ha_port:
+    name: Home Assistant listener port
+  collector_pn:
+    name: Collector identity
+    description: Blank creates a persistent ID; preserve the previous ID when upgrading.
+  allow_remote_redirect:
+    name: Allow endpoint redirects
+    description: Permit UDP/AT requests to change the Home Assistant target.
+  log_level:
+    name: Log level

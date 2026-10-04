@@ -1,0 +1,30 @@
+name: iSolar EyeBond USB Bridge
+version: "0.2.1"
+slug: isolar_eybond_usb_bridge
+description: Connect a USB serial inverter to the EyeBond Local integration.
+url: https://github.com/tac2sc/isolar-eybond-bridge-addon
+image: ghcr.io/tac2sc/isolar-eybond-bridge-addon
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+init: false
+host_network: true
+uart: true
+options:
+  serial_device: /dev/ttyUSB0
+  serial_baud: 9600
+  ha_host: ""
+  ha_port: 8899
+  collector_pn: ""
+  allow_remote_redirect: false
+  log_level: INFO
+schema:
+  serial_device: str
+  serial_baud: list(2400|4800|9600|19200)
+  ha_host: str
+  ha_port: port
+  collector_pn: "match(^$|^[A-Z][0-9]{13}([0-9]{4})?$)"
+  allow_remote_redirect: bool
+  log_level: list(DEBUG|INFO|WARNING|ERROR)

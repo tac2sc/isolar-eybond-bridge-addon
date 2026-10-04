@@ -1,0 +1,8 @@
+iSolar EyeBond USB Bridge is an independent implementation inspired by
+groove-max/esp-eybond-collector and groove-max/ha-eybond-local.
+EyeBond frame layout, discovery strings, parameters and behavior were
+cross-checked against those projects. No claim of endorsement is made.
+
+Project source code: Mozilla Public License 2.0.
+Third-party runtime packages retain their own licenses. The pyserial Python
+dependency is installed from Alpine's py3-pyserial package.

@@ -1,0 +1,20 @@
+configuration:
+  serial_device:
+    name: Последовательный порт
+    description: Введите путь /dev/serial/by-path/... или /dev/ttyUSBx к адаптеру инвертора. У одинаковых CH340 путь by-id может совпадать.
+  serial_baud:
+    name: Скорость порта
+    description: Для iSolar SMX II обычно 9600 бод.
+  ha_host:
+    name: IPv4-адрес Home Assistant
+    description: Оставьте пустым для обнаружения либо укажите адрес в локальной сети.
+  ha_port:
+    name: Порт Home Assistant
+  collector_pn:
+    name: Идентификатор коллектора
+    description: Пустое значение создаёт постоянный ID; при обновлении сохраните прежний ID.
+  allow_remote_redirect:
+    name: Разрешить смену адреса
+    description: Позволяет UDP/AT-командам менять адрес Home Assistant.
+  log_level:
+    name: Уровень журнала

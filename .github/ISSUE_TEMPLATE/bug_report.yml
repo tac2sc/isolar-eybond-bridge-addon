@@ -1,0 +1,19 @@
+name: Bug report
+description: Report a reproducible bridge issue.
+body:
+  - type: textarea
+    attributes:
+      label: Versions and hardware
+      description: App version, HAOS/Core versions, architecture, inverter and USB adapter.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction steps and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Relevant logs
+      description: Remove private addresses and collector identifiers before posting.
+      render: text
