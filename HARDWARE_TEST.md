@@ -123,7 +123,11 @@ JSONL records include the UDP reply (or its absence); it is not TCP confirmation
 The same FC2 PN query and FC4 route used by EyeBond Local's SRNE driver
 are used: devcode 1, collector address 255, Modbus slave 1. A truncated heartbeat
 PN is not accepted as the full identity; FC2 must return the exact supplied PN.
-Trailing NUL padding in that reply is supported.
+Trailing NUL padding in that reply is supported. The PN query checks the reply's
+TID and FC2, but does not require its device code/address to echo the query:
+the owner's stock collector returns code `0x0102`, address `0xFF` to a query
+sent with code `0`, address `1`. Exact PN and inverter identity checks are still
+required; route matching for forwarded Modbus responses is unchanged.
 
 ### Preparation
 
@@ -141,16 +145,22 @@ Trailing NUL padding in that reply is supported.
    masters while using the stock collector; no parallel USB polling/writes.
    Keep the collector powered and connected through its normal Wi-Fi/inverter
    connection. Do not change its UART settings or persistent server settings.
-4. Run on the Ubuntu host in the same trusted LAN. Allow TCP 8898 inbound from
+4. Run on the Ubuntu host in the same trusted LAN. Allow TCP 8899 inbound from
    the collector, and UDP 58899 outbound to it. `--peer-ip` is now the physical
    collector IP, **not** the HAOS VM. Do not expose the listener to the Internet.
+
+The owner's stock collector was observed to connect to the Ubuntu listener on
+8899, but not 8898. Use explicit `--port 8899` for this unit (the unchanged USB
+Bridge default is 8898). First check `ss -lntp 'sport = :8899'` on Ubuntu: if the
+port is occupied, do not stop that service or assume another port will work.
+This observation is not a universal firmware port restriction.
 
 Use the same `PROFILE` variable prepared above. Replace all placeholders with
 the verified addresses, full stock collector PN and original local TCP port:
 
 ```bash
 python tools/hardware_controls.py \
-  --transport wifi --profile "$PROFILE" \
+  --transport wifi --profile "$PROFILE" --port 8899 \
   --listen UBUNTU_LAN_IP --peer-ip WIFI_COLLECTOR_IP --pn STOCK_COLLECTOR_PN \
   --return-host ORIGINAL_HA_CALLBACK_IP --return-port ORIGINAL_HA_CALLBACK_PORT \
   --report smx-wifi-read-only.jsonl
@@ -162,7 +172,7 @@ supervised write/readback/restore test:
 
 ```bash
 python tools/hardware_controls.py \
-  --transport wifi --profile "$PROFILE" \
+  --transport wifi --profile "$PROFILE" --port 8899 \
   --listen UBUNTU_LAN_IP --peer-ip WIFI_COLLECTOR_IP --pn STOCK_COLLECTOR_PN \
   --return-host ORIGINAL_HA_CALLBACK_IP --return-port ORIGINAL_HA_CALLBACK_PORT \
   --write --control input_change_alarm \

@@ -136,6 +136,69 @@ class PlanningTests(unittest.TestCase):
                 hardware.validate_reply(bad, 3)
 
 
+class CapturedPnReplyTests(unittest.IsolatedAsyncioTestCase):
+    # TCP payload captured from QA521322880760: TID 1, advertised device code
+    # 0x0102/address 0xFF, FC2, status 0, parameter 2, exact collector PN.
+    PN_FRAME = bytes.fromhex("000101020012ff0200025141353231333232383830373630")
+
+    def wire_with_reply(self, frame):
+        reader = asyncio.StreamReader()
+
+        class Writer:
+            def __init__(self):
+                self.requests = []
+                self.closed = False
+
+            def write(self, data):
+                self.requests.append(data)
+                reader.feed_data(frame)
+
+            async def drain(self):
+                pass
+
+            def close(self):
+                self.closed = True
+
+        writer = Writer()
+        return hardware.Wire(reader, writer, 1), writer
+
+    async def test_captured_stock_pn_reply_accepts_advertised_identity_header(self):
+        wire, writer = self.wire_with_reply(self.PN_FRAME)
+        reply = await wire.exchange(b"\x02", function=2, devcode=0, address=1)
+        self.assertEqual(writer.requests, [bytes.fromhex("000100000003010202")])
+        self.assertEqual(reply, b"\x00\x02QA521322880760")
+        self.assertFalse(writer.closed)
+
+    async def test_wrong_tid_or_function_in_pn_reply_still_closes_connection(self):
+        for tid, fc in ((2, 2), (1, 4)):
+            with self.subTest(tid=tid, fc=fc):
+                frame = hardware.HEADER.pack(tid, 0x0102, 18, 255, fc) + self.PN_FRAME[8:]
+                wire, writer = self.wire_with_reply(frame)
+                with self.assertRaisesRegex(ValueError, "uncorrelated EyeBond reply"):
+                    await wire.exchange(b"\x02", function=2, devcode=0, address=1)
+                self.assertTrue(writer.closed)
+
+    async def test_captured_reply_with_wrong_expected_pn_prevents_register_requests(self):
+        wire, writer = self.wire_with_reply(self.PN_FRAME)
+        with self.assertRaisesRegex(ValueError, "collector PN mismatch"):
+            await wire.identify("OTHER-PN")
+        self.assertEqual(len(writer.requests), 1)  # no forwarded reads or writes
+
+    async def test_route_mismatch_is_still_rejected_for_forwarded_modbus(self):
+        reply = hardware.rtu(bytes.fromhex("010302008E"))
+        frame = hardware.HEADER.pack(1, 0x0102, len(reply) + 2, 255, 4) + reply
+        wire, writer = self.wire_with_reply(frame)
+        with self.assertRaisesRegex(ValueError, "uncorrelated EyeBond reply"):
+            await wire.read(0xE009)
+        self.assertTrue(writer.closed)
+
+    async def test_other_collector_queries_do_not_relax_route_matching(self):
+        wire, writer = self.wire_with_reply(self.PN_FRAME)
+        with self.assertRaisesRegex(ValueError, "uncorrelated EyeBond reply"):
+            await wire.exchange(b"\x06", function=2, devcode=0, address=1)
+        self.assertTrue(writer.closed)
+
+
 class RoundTripTests(unittest.IsolatedAsyncioTestCase):
     async def test_success_changes_reads_and_restores_exact_raw_word(self):
         journal = MemoryJournal()
@@ -364,7 +427,7 @@ class SimulatedWifiCollector(asyncio.DatagramProtocol):
     """Stock-style reverse TCP peer, not USB Bridge; all registers simulated."""
 
     def __init__(self, *, pn="W00000000000000001", identity=hardware.PRODUCT_INFO,
-                 mismatch=False, lost_ack=False, restore_fail=False):
+                 mismatch=False, lost_ack=False, restore_fail=False, stock_identity_header=False):
         self.pn = pn
         self.registers = {53 + index: ord(char) for index, char in enumerate(identity)}
         self.registers[0xE211] = 1
@@ -376,6 +439,7 @@ class SimulatedWifiCollector(asyncio.DatagramProtocol):
         self.mismatch = mismatch
         self.lost_ack = lost_ack
         self.restore_fail = restore_fail
+        self.stock_identity_header = stock_identity_header
 
     def connection_made(self, transport):
         self.transport = transport
@@ -404,6 +468,8 @@ class SimulatedWifiCollector(asyncio.DatagramProtocol):
                 if fc == 2:
                     assert (code, addr, request) == (0, 1, b"\x02")
                     body = b"\x00\x02" + self.pn.encode("ascii") + b"\x00\x00"
+                    if self.stock_identity_header:
+                        code, addr = 0x0102, 255
                 else:
                     assert (code, addr, fc) == (1, 255, 4)
                     hardware.validate_reply(request, request[1])
@@ -441,7 +507,7 @@ class SimulatedWifiCollector(asyncio.DatagramProtocol):
 class WifiRunTests(unittest.IsolatedAsyncioTestCase):
     async def simulate(self, **changes):
         fake_options = {key: changes.pop(key) for key in (
-            "pn", "identity", "mismatch", "lost_ack", "restore_fail")
+            "pn", "identity", "mismatch", "lost_ack", "restore_fail", "stock_identity_header")
                         if key in changes}
         collector = SimulatedWifiCollector(**fake_options)
         udp, _ = await asyncio.get_running_loop().create_datagram_endpoint(
@@ -489,6 +555,19 @@ class WifiRunTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(collector.registers[0xE211], 1)
         self.assertTrue(any(row["event"] == "PASS" for row in rows))
         self.assertTrue(all(fc in (2, 4) for _, _, fc, _ in collector.frames))
+
+    async def test_stock_pn_header_allows_round_trip_and_exact_restoration(self):
+        result, collector, rows = await self.simulate(stock_identity_header=True)
+        self.assertEqual(result, 0)
+        self.assertEqual(collector.writes, [(0xE211, 0), (0xE211, 1)])
+        self.assertEqual(collector.registers[0xE211], 1)
+        self.assertTrue(any(row["event"] == "PASS" for row in rows))
+
+    async def test_stock_pn_header_does_not_allow_a_different_inverter(self):
+        result, collector, _ = await self.simulate(
+            stock_identity_header=True, identity="SR-2206260036-300918")
+        self.assertIsInstance(result, ValueError)
+        self.assertEqual(collector.writes, [])
 
     async def test_wifi_read_only_does_not_write(self):
         result, collector, rows = await self.simulate(write=False, control=[])

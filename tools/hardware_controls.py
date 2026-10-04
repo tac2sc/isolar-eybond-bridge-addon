@@ -189,8 +189,18 @@ class Wire:
                     body = await self.reader.readexactly(length - 2)
                     if fc == 1:  # unsolicited collector heartbeat, not a reply
                         continue
-                    if (tid, code, addr, fc) != (self.tid, devcode, address, function):
-                        raise ValueError("uncorrelated EyeBond reply")
+                    # Stock collectors advertise their own code/address in the
+                    # FC2 PN reply, rather than echoing the query's 0/1 route.
+                    # Keep TID/FC correlation and all forwarded Modbus checks.
+                    pn_query = (function, devcode, address, payload) == (2, 0, 1, b"\x02")
+                    if (tid, fc) != (self.tid, function) or (
+                        not pn_query and (code, addr) != (devcode, address)
+                    ):
+                        raise ValueError(
+                            f"uncorrelated EyeBond reply: header={header.hex()} "
+                            f"expected tid={self.tid} fc={function} "
+                            f"devcode=0x{devcode:04x} address=0x{address:02x}"
+                        )
                     return body
         except BaseException:
             # A partial/late frame must not be reused to confirm another command.
