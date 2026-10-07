@@ -1,8 +1,8 @@
 # iSolar EyBond USB Bridge for Home Assistant
 
 Community maintained Home Assistant app (formerly add-on) for an EASUN/iSolar
-SMX II connected over USB serial. The app presents a network EyeBond collector
-to the separately installed [EyeBond Local](https://github.com/groove-max/ha-eybond-local)
+SMX II connected over USB serial. The app presents a network EyBond collector
+to the separately installed [EyBond Local](https://github.com/groove-max/ha-eybond-local)
 integration. It does not include the integration or a Modbus register map.
 
 **Status:** 0.2.1 publication candidate. Automated checks have completed
@@ -26,7 +26,7 @@ inverter model, firmware version or writable setting has been validated.
 Passing CI does not publish an image to GHCR; publication is a separate step.
 
 For supervised real-inverter write/readback/restore checks, see
-[hardware control tests](HARDWARE_TEST.md) (USB Bridge or stock local EyeBond
+[hardware control tests](HARDWARE_TEST.md) (USB Bridge or stock local EyBond
 Wi-Fi collector, using `--transport wifi`). These tests require explicit
 per-setting approval and are not run against hardware by GitHub Actions.
 
@@ -34,7 +34,7 @@ per-setting approval and are not run against hardware by GitHub Actions.
 
 1. Add `https://github.com/tac2sc/isolar-eybond-bridge-addon` as an app
    repository in Home Assistant Settings → Apps → Install app → repositories.
-2. Install **iSolar EyeBond USB Bridge**. Select the serial device and start it.
+2. Install **iSolar EyBond USB Bridge**. Select the serial device and start it.
 3. Follow [app documentation](isolar_eybond_usb_bridge/DOCS.md) for integration
    setup and migration.
 
@@ -57,4 +57,4 @@ See [security notes](SECURITY.md), [license](LICENSE), and
 [release checklist](RELEASE.md).
 
 This community project is not affiliated with or endorsed by Home Assistant,
-EyeBond or the inverter manufacturer.
+EyBond or the inverter manufacturer.
