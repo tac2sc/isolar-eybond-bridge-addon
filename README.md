@@ -1,4 +1,4 @@
-# iSolar EyeBond USB Bridge for Home Assistant
+# iSolar EyBond USB Bridge for Home Assistant
 
 Community maintained Home Assistant app (formerly add-on) for an EASUN/iSolar
 SMX II connected over USB serial. The app presents a network EyeBond collector
