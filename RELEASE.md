@@ -29,10 +29,9 @@ is unavailable. No push, GHCR release or hardware validation has been claimed.
 The community repo above can be submitted to
 `home-assistant/addons` for maintainer consideration only after real device
 evidence and sustained maintenance. Acceptance is controlled by Home Assistant;
-a working custom app does not become official automatically. The Home Assistant
-project's AI policy requires the human submitter to understand and explain
-AI-assisted changes. If maintainers favor a community repository, retain this
-install path instead of claiming official status.
+a working custom app does not become official automatically. If maintainers
+favor a community repository, retain this install path instead of claiming
+official status.
 
 Potential review concerns: host networking and broad `uart: true` mapping
 (required by current broadcast discovery and selectable serial hardware),
