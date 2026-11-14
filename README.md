@@ -1,5 +1,7 @@
 # iSolar EyeBond USB Bridge
 
+[![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Ftac2sc%2Fisolar-eybond-bridge-addon)
+
 Connect your EASUN/iSolar inverter to Home Assistant via USB, without a separate EyeBond Wi-Fi collector.
 
 This Home Assistant app turns a USB-connected inverter into a virtual EyeBond collector, allowing it to work with the [EyeBond Local](https://github.com/groove-max/ha-eybond-local) integration.
