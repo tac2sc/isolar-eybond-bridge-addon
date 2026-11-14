@@ -1,33 +1,98 @@
-# iSolar EyeBond USB Bridge 0.2.1 - draft release notes
+# iSolar EyeBond USB Bridge 0.2.1
 
-**Status: release candidate, not a publication notice.**
+Version 0.2.1 of the iSolar EyeBond USB Bridge for Home Assistant.
 
-## Purpose
+This community app connects supported USB serial inverters to the
+[EyeBond Local](https://github.com/groove-max/ha-eybond-local)
+integration without requiring a separate Wi-Fi collector.
 
-Home Assistant community app for connecting supported USB serial inverters to the separately installed EyeBond Local integration without a Wi-Fi collector. It emulates the collector protocol and forwards serial traffic; device-specific Modbus decoding and write authorization remain in EyeBond Local.
+## Highlights
 
-## Included in candidate
+- USB-to-EyeBond collector emulation for Home Assistant.
+- Collector discovery, heartbeat and callback handling.
+- Serial connection and baud-rate configuration.
+- Improved protocol framing and reconnection handling.
+- Persistent USB serial device path support.
+- Prebuilt Docker images for amd64 and aarch64.
 
-- Collector discovery/callback and FC1 heartbeat lifecycle, FC3 restart/apply acknowledgement/reconnect, serial baud changes and framing robustness.
-- HAOS app packaging and documented USB serial selection.
-- Automated tests and native amd64/aarch64 container build validation as reported in the project README.
+## Verified compatibility
+
+Successfully tested on an existing Home Assistant OS installation
+with an EASUN iSolar SMX-II 3.6 kW / 24 V inverter.
+
+Verified behavior:
+
+- Home Assistant app upgraded from 0.2.0 to 0.2.1.
+- Published GHCR image installed and started successfully.
+- Persistent USB serial device path retained.
+- Connection established with the EyeBond Local listener.
+- Initial EyeBond heartbeat sent successfully.
+- Inverter identified as SRNE SR-2206260036-300917.
+- Collector PN V0000000000000 retained.
+- Battery, grid, load and temperature telemetry available
+  through EyeBond Local.
+
+The integration identified the device using:
+
+- Protocol family: srne_modbus
+- Protocol variant: smx_ii_24v
+- Register schema: srne_modbus/smx_ii_24v.json
+
+## Build and validation
+
+Release source commit:
+
+`89bce301da50fe1aa9e027b2bd7fa776b049dce0`
+
+Completed successfully:
+
+- Python 3.12 and Python 3.13 CI checks.
+- Native amd64 and aarch64 container build checks.
+- GitHub CodeQL analysis for Python and GitHub Actions.
+- Release workflow validation.
+- GHCR image publication for both supported architectures.
+- Multi-architecture OCI image manifest verification.
+
+Container image:
+
+`ghcr.io/tac2sc/isolar-eybond-bridge-addon:0.2.1`
+
+Published manifest digest:
+
+`sha256:c3daf997bd3f678a16c4189a434e7c449a9836483a96a9b55cc3afb25b72138e`
 
 ## Compatibility and limitations
 
-- EASUN iSolar SMX-II 3.6 kW / 24 V can use the exact `srne_modbus/smx_ii_24v.json` telemetry schema added in EyeBond Local PR #91 (merged November 14, 2026), subject to installing a compatible integration build.
-- Write capabilities described in EyeBond Local PR #96 are **not part of this Bridge release**. PR #96 was open at preparation time. Two capabilities had been physically verified on the owner's unit, not all 36, and an end-to-end write test specifically over USB Bridge remains to be documented.
-- CI uses simulated serial responses; broad hardware compatibility and safe operation of unverified writes are not claimed.
-- Unauthenticated network protocol: use only a trusted LAN; do not forward UDP 58899 or the callback listener to the Internet.
+The bridge handles USB serial communication and EyeBond network
+transport. Inverter-specific Modbus decoding and authorization
+of writable settings are implemented in EyeBond Local.
 
-## Release acceptance gates (must be recorded before publication)
+The EASUN SMX-II 24 V telemetry schema was introduced in
+EyeBond Local PR #91. A compatible integration version is required.
 
-- [ ] Record reviewed source commit and clean test results.
-- [ ] Validate app configuration, shell syntax, Python 3.12/3.13 checks, and native amd64/aarch64 image builds.
-- [ ] Verify real HAOS app start/stop, stable USB mapping and collector identity after restart.
-- [ ] Confirm live exact-model telemetry via USB Bridge and preserve redacted evidence.
-- [ ] Document controlled readback/restore testing separately; do not imply it happened through USB if evidence is from a Wi-Fi collector.
-- [ ] Publish GHCR amd64 and arm64 images using the reviewed release workflow; confirm public package and manifests.
-- [ ] Verify a fresh HAOS install actually pulls the published image.
-- [ ] Tag and announce only the source revision that corresponds to the tested image.
+The 36 control capabilities proposed in EyeBond Local PR #96
+are not part of this bridge release. Two control capabilities
+were physically tested using the stock Wi-Fi collector.
+End-to-end write/readback testing through this USB bridge
+has not been established for all controls.
 
-See `RELEASE.md`, `HARDWARE_TEST.md` and `docs/SMX_II_24V_INTEROP.md`.
+Additional limitations:
+
+- Automated protocol tests use simulated serial responses.
+- A fresh Home Assistant OS installation has not been
+  independently verified.
+- Compatibility with every inverter model and firmware
+  version is not guaranteed.
+- The EyeBond network protocol is unauthenticated.
+  Use only on trusted networks. Do not expose the relevant
+  ports directly to the Internet.
+
+## Documentation
+
+- [Installation and migration](isolar_eybond_usb_bridge/DOCS.md)
+- [Hardware testing](HARDWARE_TEST.md)
+- [SMX-II interoperability](docs/SMX_II_24V_INTEROP.md)
+- [Security](SECURITY.md)
+
+This is an independent community project, not affiliated with
+or endorsed by Home Assistant, EyeBond or the inverter manufacturer.
