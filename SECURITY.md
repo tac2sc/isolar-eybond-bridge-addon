@@ -17,4 +17,3 @@ enabled; a custom profile is intentionally not claimed without HAOS validation.
 
 Report vulnerabilities using GitHub's private vulnerability reporting once enabled
 by the repository owner. Do not publish sensitive packet captures in public issues.
-Supported candidate: 0.2.x. Enable private reports before the first public release.
